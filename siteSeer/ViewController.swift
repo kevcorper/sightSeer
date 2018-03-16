@@ -19,6 +19,7 @@ class ViewController: UIViewController, ARSKViewDelegate, CLLocationManagerDeleg
     var sightsJSON : JSON!
     var userHeading = 0.0
     var headingCount = 0
+    var pages = [UUID: String]()
     
     @IBOutlet var sceneView: ARSKView!
     
@@ -67,7 +68,21 @@ class ViewController: UIViewController, ARSKViewDelegate, CLLocationManagerDeleg
     // MARK: - ARSKViewDelegate
     
     func view(_ view: ARSKView, nodeFor anchor: ARAnchor) -> SKNode? {
-        return nil
+        let labelNode = SKLabelNode(text: pages[anchor.identifier])
+        labelNode.horizontalAlignmentMode = .center
+        labelNode.verticalAlignmentMode = .center
+        
+        let size = labelNode.frame.size.applying(CGAffineTransform(scaleX: 1.1, y: 1.4))
+        
+        let backgroundNode = SKShapeNode(rectOf: size, cornerRadius: 10)
+        
+        backgroundNode.fillColor = UIColor(hue: CGFloat(GKRandomSource.sharedRandom().nextUniform()), saturation: 0.5, brightness: 0.4, alpha: 0.9)
+        backgroundNode.strokeColor = backgroundNode.fillColor.withAlphaComponent(1)
+        backgroundNode.lineWidth = 2
+        
+        backgroundNode.addChild(labelNode)
+        
+        return backgroundNode
     }
     
     func session(_ session: ARSession, didFailWithError error: Error) {
@@ -116,7 +131,34 @@ class ViewController: UIViewController, ARSKViewDelegate, CLLocationManagerDeleg
     }
     
     func createSights() {
-        
+        for page in sightsJSON["query"]["pages"].dictionaryValue.values {
+            let locationLat = page["coordinates"][0]["lat"].doubleValue
+            let locationLon = page["coordinates"][0]["lon"].doubleValue
+            let location = CLLocation(latitude: locationLat, longitude: locationLon)
+            
+            let distance = Float(userLocation.distance(from: location))
+            let azimuthFromUser = direction(from: userLocation, to: location)
+            
+            let angle = azimuthFromUser - userHeading
+            let angleRadians = deg2Rad(angle)
+            
+            let rotationHorizontal = matrix_float4x4(SCNMatrix4MakeRotation(Float(angleRadians), 1, 0, 0))
+            let rotationVertical = matrix_float4x4(SCNMatrix4MakeRotation(-0.2 + Float(distance / 600), 0, 1, 0))
+            
+            let rotation = simd_mul(rotationHorizontal, rotationVertical)
+            guard let sceneView = self.view as? ARSKView else {return}
+            guard let frame = sceneView.session.currentFrame else {return}
+            let rotation2 = simd_mul(frame.camera.transform, rotation)
+            
+            var translation = matrix_identity_float4x4
+            translation.columns.3.z = -(distance / 50)
+            
+            let transform = simd_mul(rotation2, translation)
+            
+            let anchor = ARAnchor(transform: transform)
+            sceneView.session.add(anchor: anchor)
+            pages[anchor.identifier] = page["title"].string ?? "Unknown"
+        }
     }
     
     func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
@@ -130,6 +172,24 @@ class ViewController: UIViewController, ARSKViewDelegate, CLLocationManagerDeleg
             self.locationManager.stopUpdatingHeading()
             self.createSights()
         }
+    }
+    
+    func deg2Rad(_ degrees:Double) -> Double {
+        return degrees * Double.pi / 180
+    }
+    
+    func rad2Deg(_ radians:Double) -> Double {
+        return radians * 180 / Double.pi
+    }
+    
+    func direction(from place1:CLLocation, to place2:CLLocation) -> Double {
+        
+        let lon_delta = place2.coordinate.longitude - place1.coordinate.longitude
+        let y = sin(lon_delta) * cos(place2.coordinate.longitude)
+        let x = cos(place1.coordinate.latitude) * sin(place2.coordinate.latitude) - sin(place1.coordinate.latitude)
+        let radians = atan2(y,x)
+        
+        return rad2Deg(radians)
     }
 }
 
