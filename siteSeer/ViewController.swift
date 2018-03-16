@@ -15,6 +15,7 @@ import GameplayKit
 class ViewController: UIViewController, ARSKViewDelegate, CLLocationManagerDelegate {
     
     let locationManager = CLLocationManager()
+    var userLocation = CLLocation()
     
     @IBOutlet var sceneView: ARSKView!
     
@@ -32,6 +33,10 @@ class ViewController: UIViewController, ARSKViewDelegate, CLLocationManagerDeleg
         if let scene = SKScene(fileNamed: "Scene") {
             sceneView.presentScene(scene)
         }
+        
+        locationManager.delegate = self
+        locationManager.desiredAccuracy = kCLLocationAccuracyBest
+        locationManager.requestWhenInUseAuthorization()
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -76,4 +81,38 @@ class ViewController: UIViewController, ARSKViewDelegate, CLLocationManagerDeleg
         // Reset tracking and/or remove existing anchors if consistent tracking is required
         
     }
+    
+    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        if status == .authorizedWhenInUse {
+            locationManager.requestLocation()
+        }
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print(error.localizedDescription)
+    }
+    
+    func fetchSights() {
+        
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last else {return}
+        userLocation = location
+        
+        DispatchQueue.global().sync {
+            self.fetchSights()
+        }
+    }
 }
+
+
+
+
+
+
+
+
+
+
+
